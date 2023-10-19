@@ -4,7 +4,7 @@ from streamlit_option_menu import option_menu
 import pandas as pd
 import nltk
 from nltk.corpus import stopwords
-from nltk.tokenize import sent_tokenize, word_tokenize
+from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 import nltk
 nltk.download('punkt')
@@ -17,6 +17,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans  
 from sklearn import tree
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+from sklearn.metrics import accuracy_score
 
 # Opsi menu tab di sidebar
 with st.sidebar:
@@ -155,6 +156,92 @@ elif selected_option == "Preprocessing":
 elif selected_option == "Modelling dan Reduksi Dimensi":
     st.header("Modelling")
     st.subheader("LDA Topic Modelling")
-    
+    st.write("""
+        note : \n
+            Label 0 = RPL\n
+            Label 1 = KK
+    """)
+
+    st.write("LDA memungkinkan kita untuk memahami topik-topik umum yang muncul dalam koleksi dokumen tanpa memerlukan label atau anotasi topik dari manusia karena diambil menggunakan probabilitas kata kata dalam setiap topik")
     tflda = pd.read_csv('data/TermFrequensi.csv')
-    tflda
+    
+    kelas_dataset = tflda['Label']
+
+    # Ubah kelas RPL menjadi 0 dan kelas KK menjadi 1
+    kelas_dataset_binary = [0 if kelas == 'RPL' else 1 for kelas in kelas_dataset]
+
+    # Contoh cetak hasilnya
+    tflda['Label']=kelas_dataset_binary
+
+    X = tflda.drop('Dokumen', axis=1)
+
+    #LDA
+    k = 3
+    alpha = 0.1
+    beta = 0.2
+
+    lda = LatentDirichletAllocation(n_components=k, doc_topic_prior=alpha, topic_word_prior=beta)
+    proporsi_topik_dokumen = lda.fit_transform(X)
+    # proporsi topik
+    dokumen = tflda['Dokumen']
+    label= tflda['Label']
+    output_proporsi_TD = pd.DataFrame(proporsi_topik_dokumen, columns=['Topik 1', 'Topik 2', 'Topik 3'])
+    output_proporsi_TD.insert(0,'Dokumen', dokumen)
+    output_proporsi_TD.insert(len(output_proporsi_TD.columns),'Label', tflda['Label'])
+    output_proporsi_TD
+
+    # Output distribusi
+    st.subheader("Output distribusi kata pada topik")
+    distribusi_kata_topik = pd.DataFrame(lda.components_)
+    distribusi_kata_topik
+
+
+    #LDA kmeans
+    st.subheader("LDA Kmeans")
+    X_clustering = proporsi_topik_dokumen
+    n_clusters = 3
+
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+    clusters = kmeans.fit_predict(X_clustering)
+
+    # Menambahkan hasil clustering ke DataFrame
+    output_proporsi_TD['Cluster'] = clusters
+    # Mengganti kembali nilai 0 dan 1 menjadi 'RPL' dan 'KK' pada kolom 'Label'
+
+    # Menggabungkan DataFrame hasil LDA dan DataFrame hasil clustering
+    st.subheader("Menggabungkan dataframe LDA dan Cluster")
+    output_final_df = pd.concat([output_proporsi_TD], axis=1)
+    output_final_df['Label'] = output_final_df['Label'].replace({0: 'RPL', 1: 'KK'})
+
+    output_final_df
+
+
+
+    # Naive Bayes
+    st.subheader("Perhitungan akurasi Naive Bayes dan KNN")
+    # Memisahkan fitur dan label kelas target
+    X = output_proporsi_TD[['Topik 1', 'Topik 2', 'Topik 3']]
+    y = output_proporsi_TD['Label']  # Gantilah 'Kelas_Target' dengan nama kolom yang sesuai untuk label kelas target
+
+    # Memisahkan data menjadi data latih dan data uji
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+    # Membuat model Naive Bayes
+    naive_bayes = GaussianNB()
+    naive_bayes.fit(X_train, y_train)
+    predictions = naive_bayes.predict(X_test)
+    accuracy = round(accuracy_score(y_test, predictions)*100,2)
+    accnb = round(naive_bayes.score(X_train,y_train)*100,2)
+    
+    st.write("Akurasi Naive Bayes:", accuracy)
+
+
+    # KNN
+    knn = KNeighborsClassifier(n_neighbors=3)
+    knn.fit(X_train,y_train)
+    predict = knn.predict(X_test)
+    accuracyknn = round(accuracy_score(y_test,predict)*100,2)
+    accknn = round(knn.score(X_train,y_train)*100,2)
+
+    st.write("Akurasi KNN :", accknn)
+    
