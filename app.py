@@ -6,7 +6,6 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-import nltk
 nltk.download('punkt')
 # Download kamus stop words
 nltk.download('stopwords')
@@ -15,9 +14,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.cluster import KMeans  
-from sklearn import tree
+from sklearn.tree import DecisionTreeClassifier
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from sklearn.metrics import accuracy_score
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.feature_extraction.text import CountVectorizer
 
 # Opsi menu tab di sidebar
 with st.sidebar:
@@ -141,15 +142,15 @@ elif selected_option == "Preprocessing":
     # st.write("")
     # onehot = pd.read_csv('data/OneHotEncoder.csv')
     # onehot
-    # st.subheader("TF-IDF")
-    # tfidf = pd.read_csv('data/TF-IDF.csv')
-    # tfidf
     # st.subheader("Term Frequency")
     # termfrequency = pd.read_csv('data/TermFrequensi.csv')
     # termfrequency
     # st.subheader("Logarithm Frequency")
     # logfrequency = pd.read_csv('data/Logarithm_Frequensi.csv')
     # logfrequency
+    # st.subheader("TF-IDF")
+    # tfidf = pd.read_csv('data/TF-IDF.csv')
+    # tfidf
 
 
 
@@ -164,70 +165,119 @@ elif selected_option == "Modelling dan Reduksi Dimensi":
 
     st.write("LDA memungkinkan kita untuk memahami topik-topik umum yang muncul dalam koleksi dokumen tanpa memerlukan label atau anotasi topik dari manusia karena diambil menggunakan probabilitas kata kata dalam setiap topik")
     tflda = pd.read_csv('data/TermFrequensi.csv')
-    
-    kelas_dataset = tflda['Label']
+    st.write("Data awal import seperti ini",tflda)
 
+    kelas_dataset = tflda['Label']
+    
     # Ubah kelas RPL menjadi 0 dan kelas KK menjadi 1
     kelas_dataset_binary = [0 if kelas == 'RPL' else 1 for kelas in kelas_dataset]
-
     # Contoh cetak hasilnya
     tflda['Label']=kelas_dataset_binary
+    y = tflda['Label']
+    # st.write("Lalu diubah kelas/label menjadi 0 untuk RPL dan 1 untuk KK",kelas_dataset,y)
 
-    X = tflda.drop('Dokumen', axis=1)
 
+    X = tflda.drop("Dokumen",axis=1)
+    vectorizer = CountVectorizer(stop_words='english')
+    X =vectorizer.fit_transform(tflda['Dokumen'].values.astype('U'))
+    # st.write(X)
+
+
+    # Memisahkan data menjadi data latih dan data uji
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
     #LDA
     k = 3
     alpha = 0.1
     beta = 0.2
 
     lda = LatentDirichletAllocation(n_components=k, doc_topic_prior=alpha, topic_word_prior=beta)
-    proporsi_topik_dokumen = lda.fit_transform(X)
+    # Latih model LDA pada training set yg sudah di vectorisasi
+    proporsi_topik_dokumen_train = lda.fit_transform(X_train)
+    # Proyeksi dokumen pada test set ke topik yg telah dipelajari
+    proporsi_topik_dokumen_test = lda.transform(X_test)
+#     st.write("Lalu data dipisahkan atau di split")
+#     st.code("""
+#     #split data
+#     y = tflda['Label']
+#     X = tflda.drop("Dokumen",axis=1)
+#     vectorizer = CountVectorizer(stop_words='english')
+#     X =vectorizer.fit_transform(tflda['Dokumen'].values.astype('U'))
+    
+#     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+            
+# """)
+#     st.write("Setelah itu dilakukan LDA beserta pelatihan")
+#     st.code(""""
+            
+#     #LDA
+#     k = 3
+#     alpha = 0.1
+#     beta = 0.2
+
+#     lda = LatentDirichletAllocation(n_components=k, doc_topic_prior=alpha, topic_word_prior=beta)
+#             """)
+    
+#     st.code(""""
+#     # Latih model LDA pada training set yg sudah di vectorisasi
+#     proporsi_topik_dokumen_train = lda.fit_transform(X_train)
+#     # Proyeksi dokumen pada test set ke topik yg telah dipelajari
+#     proporsi_topik_dokumen_test = lda.transform(X_test)
+#             """)
+
     # proporsi topik
     dokumen = tflda['Dokumen']
     label= tflda['Label']
-    output_proporsi_TD = pd.DataFrame(proporsi_topik_dokumen, columns=['Topik 1', 'Topik 2', 'Topik 3'])
+    output_proporsi_TD = pd.DataFrame(proporsi_topik_dokumen_test, columns=['Topik 1', 'Topik 2', 'Topik 3'])
     output_proporsi_TD.insert(0,'Dokumen', dokumen)
     output_proporsi_TD.insert(len(output_proporsi_TD.columns),'Label', tflda['Label'])
-    output_proporsi_TD
+    csvawal = pd.read_csv('data/data_label_crawling.csv')
+    judul = csvawal['Judul']
+    output_judul = pd.concat([judul,output_proporsi_TD],axis=1)
+    st.write("Data setelah di LDA kan")
+    output_judul
 
     # Output distribusi
-    st.subheader("Output distribusi kata pada topik")
-    distribusi_kata_topik = pd.DataFrame(lda.components_)
-    distribusi_kata_topik
+    # st.subheader("Output distribusi kata pada topik")
+    # distribusi_kata_topik = pd.DataFrame(lda.components_)
+    # distribusi_kata_topik
 
 
     #LDA kmeans
     st.subheader("LDA Kmeans")
-    X_clustering = proporsi_topik_dokumen
+    X_clustering = proporsi_topik_dokumen_test
     n_clusters = 3
 
     kmeans = KMeans(n_clusters=n_clusters, random_state=0)
     clusters = kmeans.fit_predict(X_clustering)
-
-    # Menambahkan hasil clustering ke DataFrame
+    
+    # Menggabungkan hasil clustering ke DataFrame hasil LDA
     output_proporsi_TD['Cluster'] = clusters
-    # Mengganti kembali nilai 0 dan 1 menjadi 'RPL' dan 'KK' pada kolom 'Label'
-
     # Menggabungkan DataFrame hasil LDA dan DataFrame hasil clustering
-    st.subheader("Menggabungkan dataframe LDA dan Cluster")
-    output_final_df = pd.concat([output_proporsi_TD], axis=1)
-    output_final_df['Label'] = output_final_df['Label'].replace({0: 'RPL', 1: 'KK'})
+    st.write("Menggabungkan dataframe LDA dan Cluster")
+    output_gabung = pd.concat([output_proporsi_TD], axis=1)
+    output_gabung['Label'] = output_gabung['Label'].replace({0: 'RPL', 1: 'KK'})
+    
+    # Menampilkan hasil akhir
+    output_judul = pd.concat([judul, output_gabung], axis=1)
+    output_judul
 
-    output_final_df
 
 
 
     # Naive Bayes
-    st.subheader("Perhitungan akurasi Naive Bayes dan KNN")
-    # Memisahkan fitur dan label kelas target
-    X = output_proporsi_TD[['Topik 1', 'Topik 2', 'Topik 3']]
-    y = output_proporsi_TD['Label']  # Gantilah 'Kelas_Target' dengan nama kolom yang sesuai untuk label kelas target
+    st.subheader("Perhitungan akurasi Naive Bayes, KNN dan Decision Tree")
 
-    # Memisahkan data menjadi data latih dan data uji
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+    # # Membuat model Naive Bayes
+    # naive_bayes = GaussianNB()
+    # naive_bayes.fit(X_train.toarray(), y_train)
+    # predictions = naive_bayes.predict(X_test.toarray())
+    # accuracy = round(accuracy_score(y_test, predictions)*100,2)
+    # accnb = round(naive_bayes.score(X_train,y_train)*100,2)
+    
+    # st.write("Akurasi Naive Bayes:", accuracy)
 
     # Membuat model Naive Bayes
-    naive_bayes = GaussianNB()
+    naive_bayes = MultinomialNB()
     naive_bayes.fit(X_train, y_train)
     predictions = naive_bayes.predict(X_test)
     accuracy = round(accuracy_score(y_test, predictions)*100,2)
@@ -238,10 +288,21 @@ elif selected_option == "Modelling dan Reduksi Dimensi":
 
     # KNN
     knn = KNeighborsClassifier(n_neighbors=3)
-    knn.fit(X_train,y_train)
-    predict = knn.predict(X_test)
+    knn.fit(X_train.toarray(),y_train)
+    predict = knn.predict(X_test.toarray())
     accuracyknn = round(accuracy_score(y_test,predict)*100,2)
     accknn = round(knn.score(X_train,y_train)*100,2)
 
     st.write("Akurasi KNN :", accknn)
     
+    # Decision Tree
+    decision_tree = DecisionTreeClassifier(random_state=42)
+    decision_tree.fit(X_train, y_train)
+    predictions_dt = decision_tree.predict(X_test)
+    accuracy_dt = round(accuracy_score(y_test, predictions_dt) * 100, 2)
+    acc_dt = round(decision_tree.score(X_train, y_train) * 100, 2)
+
+    st.write("Akurasi Decision Tree:", accuracy_dt)
+
+
+# Split sebelum LDA, Data X train,Y train digunakan
